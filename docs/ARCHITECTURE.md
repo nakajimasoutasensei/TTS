@@ -1,10 +1,10 @@
 # Architecture Plan
 
-Status: **draft v0.1** — open decisions are marked **[TBD]** (see §9).
+Status: **draft v0.2** — decisions D1–D4 resolved (see §9).
 
 ## 1. Goal
 
-A multilingual, expressive TTS model with voice cloning, targeting quality close
+An English, expressive TTS model with voice cloning, targeting quality close
 to Fish Audio S2 Pro while running on consumer GPUs:
 
 | Target | VRAM (inference, batch 1) |
@@ -75,16 +75,16 @@ AR on "how it sounds".
 | **A. Adopt Mimi (Kyutai)** — 24 kHz, 12.5 Hz, RVQ, cb0 distilled from WavLM | Ready now; fits Dual-AR exactly; streaming | Fixed design; license to verify (reported CC-BY 4.0) |
 | B. Train own codec | Full control, can tune for target languages | Large separate project (weeks of GPU time) |
 
-Recommendation: **A** for v1; revisit B only if the codec becomes the quality ceiling.
-**[TBD — D4]**
+Decision (D4): **A — adopt Mimi** for v1. Revisit B only if the codec becomes the quality ceiling.
 
 Token budget at 12.5 Hz: 1 min of audio = 750 frames. A 4096-token context holds
 roughly a 30 s reference + text + ~3 min of generated speech.
 
 ### 4.2 Slow AR (time axis)
 
-- Decoder-only transformer, initialized from a **Qwen3** base (Apache-2.0,
-  multilingual tokenizer, GQA).
+- Decoder-only transformer, initialized from a **Qwen3** base (Apache-2.0, GQA).
+  Its tokenizer is multilingual; v1 only needs English, but this keeps the door
+  open for more languages later.
 - Vocabulary = text tokens + special tokens + codebook-0 tokens
   (`<|semantic:0|>` … `<|semantic:K-1|>`).
 - Input embedding per audio frame = text/semantic embedding + sum of the
@@ -98,7 +98,8 @@ roughly a 30 s reference + text + ~3 min of generated speech.
 | S (6 GB) | 28 | 1024 | 16 / 8 | 128 | ~0.6B |
 | M (8 GB) | 28 | 2048 | 16 / 8 | 128 | ~1.7B |
 
-**[TBD — D3]** chooses S vs M as the primary training target.
+Decision (D3): **S (0.6B) is the primary training target** on the available
+hardware (see §6.3). M is a stretch goal once the pipeline is proven.
 
 ### 4.3 Fast AR (depth axis)
 
@@ -119,7 +120,7 @@ Chat-style, one turn per speaker segment:
 <|im_start|>system
 <|voice|> {reference transcript} {reference codes}<|im_end|>
 <|im_start|>user
-<|speaker:0|>Halo, apa kabar? [laugh] Senang bertemu kamu.<|im_end|>
+<|speaker:0|>Hey, how are you? [laugh] Nice to finally meet you.<|im_end|>
 <|im_start|>assistant
 <|audio_start|>{generated codes ...}<|im_end|>
 ```
@@ -159,12 +160,26 @@ Pipeline: collect → VAD segmentation (5–30 s) → ASR transcription → filt
 annotation (emotion/events via audio-LLM or classifier) → codec tokenization →
 sharded storage.
 
-Candidate open sources (license to be verified per dataset, per **[TBD — D2]**):
-Emilia / Emilia-YODAS, MLS, Common Voice, LibriHeavy, plus target-language
-sources for **[TBD — D1]**.
+English only (D1). Because D2 keeps commercial use possible, **only datasets
+whose license allows commercial use are allowed** (no NC / research-only terms).
+Candidates (each must be verified and recorded in `docs/LICENSES.md` before use):
 
-Realistic scale: 50k–200k hours (vs ~10M for S2). Data quality and diversity is
-the **main risk** to the quality goal, not model size.
+| Dataset | Approx. English hours | Reported license | Status |
+|---|---|---|---|
+| Emilia-YODAS (English part) | tens of thousands | CC-BY 4.0 | candidate |
+| MLS English (LibriVox) | ~44k | CC-BY 4.0 | candidate |
+| LibriHeavy (LibriVox) | ~50k | audio public domain; check annotations | candidate |
+| People's Speech | ~30k | CC-BY / CC-BY-SA mix | candidate, check SA terms |
+| Common Voice (English) | ~2k validated | CC0 | candidate |
+| Emilia (original, non-YODAS) | — | CC-BY-NC | **excluded** (NC) |
+| GigaSpeech | — | non-commercial audio terms | **excluded** |
+
+LibriVox-based sets overlap heavily (MLS, LibriHeavy); deduplicate by source
+book/chapter. Audiobook speech is read-style, so conversational/expressive
+sources (Emilia-YODAS, People's Speech) matter for expressiveness.
+
+Realistic scale: 30k–60k hours after filtering (vs ~10M for S2). Data quality
+and diversity is the **main risk** to the quality goal, not model size.
 
 ### 6.2 Stages
 
@@ -176,18 +191,50 @@ the **main risk** to the quality goal, not model size.
 | P3 | Preference / RL alignment (DPO first, GRPO later) | rewards: ASR WER, speaker similarity, UTMOS, tag adherence |
 | P4 | Quantization + inference optimization | int8 / int4 weight-only, `torch.compile`, CUDA graphs |
 
+### 6.3 Training hardware: NVIDIA GB10 (rented)
+
+GB10 is the Grace Blackwell "superchip" used in NVIDIA DGX Spark:
+
+- Blackwell GPU + 20-core **Arm (aarch64)** Grace CPU on one package.
+- **128 GB unified memory** shared by CPU and GPU, with ~273 GB/s bandwidth
+  (much lower than a datacenter GPU's HBM).
+- Compute is roughly in the range of a single mid/high-end desktop GPU for BF16
+  training; NVIDIA's headline "1 PFLOP" figure is FP4 with sparsity.
+
+What this means for us:
+
+| Aspect | Impact |
+|---|---|
+| 128 GB memory | Large batches and full fine-tuning of 0.6B/1.7B fit easily; no need for FSDP/ZeRO. |
+| Single-GPU compute | Pretraining must stay small: S (0.6B) model, ~50k hours. |
+| Low bandwidth | Fine for training (compute-bound at large batch); slow for batch-1 inference, so **not** representative of target GPUs. |
+| aarch64 + new GPU arch | Use NVIDIA's NGC PyTorch container (arm64) instead of plain `pip install torch`; some wheels may need building from source. |
+| Not a 6 GB card | VRAM benchmarks (M5) must cap memory (`torch.cuda.set_per_process_memory_fraction`) and should be confirmed on a real 6–8 GB GPU. |
+
+Rough compute estimate for pretraining (P1), using FLOPs ≈ 6 × params × tokens:
+
+- 50k hours × 12.5 Hz = 2.25B frames.
+- Slow AR S (0.6B): 6 × 0.6B × 2.25B ≈ 8 × 10¹⁸ FLOPs per epoch.
+- Fast AR (0.1B, 8 positions per frame): 6 × 0.1B × 18B ≈ 1.1 × 10¹⁹ FLOPs per epoch.
+- Total ≈ 2 × 10¹⁹ FLOPs per epoch. At an assumed 40–60 TFLOPS sustained BF16,
+  that is **~4–6 days per epoch**, i.e. **~2–3 weeks for 3 epochs**.
+- M (1.7B) would be ~3.4 × 10¹⁹ per epoch (~7–10 days), hence M is a stretch goal.
+
+These are estimates; the real throughput is measured in M2 and the plan is
+adjusted then. Rental cost should be checked against these durations.
+
 ## 7. Evaluation
 
 | Metric | Tool | Purpose |
 |---|---|---|
-| WER / CER | Whisper-large-v3 (or target-language ASR) | intelligibility |
+| WER | Whisper-large-v3 | intelligibility |
 | Speaker similarity | WavLM-ECAPA cosine | cloning fidelity |
 | UTMOS / DNSMOS | open MOS predictors | naturalness proxy |
 | RTF, TTFA, peak VRAM | own benchmark script | the 6/8 GB goal |
 | Tag adherence | emotion classifier + small human eval | expressiveness |
 
-Public benchmark: Seed-TTS Eval (en/zh) for comparison with published numbers;
-own test set for target languages.
+Public benchmark: Seed-TTS Eval (English test set) for comparison with published
+numbers, plus a held-out English test set with expressive and conversational speech.
 
 ## 8. Repository layout (planned)
 
@@ -211,20 +258,20 @@ TTS/
 └── tests/
 ```
 
-## 9. Open decisions
+## 9. Decisions
 
-| ID | Question | Affects |
-|---|---|---|
-| D1 | Target languages (e.g. id, en, ja, ...) | data plan, tokenizer coverage, eval sets |
-| D2 | Commercial or research/non-commercial | which datasets and codec are allowed |
-| D3 | Training compute (GPU type × count × duration) | slow AR size S vs M, data scale |
-| D4 | Codec: adopt Mimi (A) or train own (B) | P0 scope, frame rate, codebook size |
+| ID | Question | Decision | Consequence |
+|---|---|---|---|
+| D1 | Target languages | **English only** (v1) | English datasets and eval only; Qwen3 tokenizer keeps expansion possible |
+| D2 | Commercial or research | **Both** — keep commercial use possible | Only commercially usable licenses for data, codec, backbone; strictest rule wins |
+| D3 | Training compute | **1× NVIDIA GB10 (rented)** | Primary model size S (0.6B); ~50k hours; see §6.3 |
+| D4 | Codec | **Adopt Mimi** | No codec training in v1; 12.5 Hz, 8 codebooks, 24 kHz |
 
 ## 10. Milestones
 
 | ID | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | Decisions D1–D4, `LICENSES.md` | all TBDs resolved |
+| M0 | Decisions D1–D4, `LICENSES.md` | decisions done; licenses verified for backbone, codec, first datasets |
 | M1 | Codec wrapper + round-trip test | encode→decode on test set, measured quality |
 | M2 | Dual-AR model code + tiny overfit run | overfits 10 utterances, generates intelligible audio |
 | M3 | Data pipeline + first tokenized shards | ≥1k hours tokenized, filters validated |

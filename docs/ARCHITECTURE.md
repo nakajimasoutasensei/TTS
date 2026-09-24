@@ -271,8 +271,8 @@ TTS/
 
 | ID | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | Decisions D1–D4, `LICENSES.md` | decisions done; licenses verified for backbone, codec, first datasets |
-| M1 | Codec wrapper + round-trip test | encode→decode on test set, measured quality |
+| M0 | Decisions D1–D4, `LICENSES.md` | decisions done; licenses verified for backbone, codec, first datasets — *backbone + codec verified; datasets pending* |
+| M1 | Codec wrapper + round-trip test | encode→decode on test set, measured quality — *code done (`tts/codec`, `scripts/codec_roundtrip.py`); real-weight run pending on GB10* |
 | M2 | Dual-AR model code + tiny overfit run | overfits 10 utterances, generates intelligible audio |
 | M3 | Data pipeline + first tokenized shards | ≥1k hours tokenized, filters validated |
 | M4 | P1 pretraining (S size first) | WER / SIM on eval set tracked, beats baseline |

@@ -109,8 +109,15 @@ hardware (see §6.3). M is a stretch goal once the pipeline is proven.
   code k-1.
 - Predicts codebooks 1..N-1 autoregressively; its KV cache is reset every frame.
 
-Config (~100M): 4 layers, dim 1024, 16 heads, SwiGLU FFN 4096, shared
-codebook-size output head (2048).
+- Separate input embedding per codebook (c_0..c_{N-2}) and a separate output
+  head per predicted codebook (c_1..c_{N-1}).
+
+Config (~98M): 4 layers, dim 1024, 16 heads, head_dim 64, SwiGLU FFN 4096,
+QK-norm, RoPE over the codebook axis.
+
+Measured sizes of the S configuration (random init, `tts/model`): slow AR
+598M (incl. extended 153,792-token vocab), codebook embeddings 17M, fast AR
+98M — **712M total, ~1.4 GB in bf16**.
 
 ### 4.4 Prompt format
 
@@ -273,7 +280,7 @@ TTS/
 |---|---|---|
 | M0 | Decisions D1–D4, `LICENSES.md` | decisions done; licenses verified for backbone, codec, first datasets — *backbone + codec verified; datasets pending* |
 | M1 | Codec wrapper + round-trip test | encode→decode on test set, measured quality — *code done (`tts/codec`, `scripts/codec_roundtrip.py`); real-weight run pending on GB10* |
-| M2 | Dual-AR model code + tiny overfit run | overfits 10 utterances, generates intelligible audio |
+| M2 | Dual-AR model code + tiny overfit run | overfits 10 utterances, generates intelligible audio — *code done (`tts/model`, `tts/text`, `tts/inference`, `scripts/overfit.py`); tiny-model overfit test reproduces codes exactly; real run pending on GB10* |
 | M3 | Data pipeline + first tokenized shards | ≥1k hours tokenized, filters validated |
 | M4 | P1 pretraining (S size first) | WER / SIM on eval set tracked, beats baseline |
 | M5 | Inference: quantization, streaming, VRAM benchmark | runs in ≤6 GB (S/int8 M) and ≤8 GB (M) |

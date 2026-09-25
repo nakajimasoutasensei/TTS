@@ -133,6 +133,20 @@ def test_local_source(tmp_path):
     assert wav.shape == (16000,)
 
 
+def test_metadata_source(tmp_path):
+    from tts.data.sources import metadata_source
+
+    save_audio(tmp_path / "wavs" / "a1.wav", torch.zeros(24000), 24000)
+    save_audio(tmp_path / "wavs" / "a2.wav", torch.zeros(48000), 24000)
+    (tmp_path / "metadata.csv").write_text("a1|Hello there.\na2.wav|raw text|Normalized text.\n\n")
+    items = list(metadata_source(tmp_path / "metadata.csv", 24000, source_name="me"))
+    assert [(u.id, u.text, u.speaker) for u, _ in items] == [
+        ("me/a1", "Hello there.", "me/speaker0"),
+        ("me/a2", "Normalized text.", "me/speaker0"),
+    ]
+    assert items[1][0].duration == pytest.approx(2.0)
+
+
 def test_hf_source_nested_columns():
     def wav_bytes(n, sr):
         buf = io.BytesIO()

@@ -11,6 +11,9 @@ class TrainConfig:
     run_dir: str
     data: list[str]  # shard directories (mixed)
     base: str = "Qwen/Qwen3-0.6B"  # slow-AR init (ignored when resuming)
+    # Fine-tuning: start from a trained Dual-AR checkpoint instead of `base`
+    # (fresh optimizer and schedule; ignored when resuming this run).
+    init_checkpoint: str | None = None
     codec: str = "kyutai/mimi"  # only used for eval audio
     num_codebooks: int = 8
     codebook_size: int = 2048  # must match the codec used to build the shards

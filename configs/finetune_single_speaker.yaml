@@ -1,0 +1,34 @@
+# Stage 2: fine-tune a model pretrained on public multi-speaker data
+# (configs/pretrain_s.yaml) on your own single-speaker recordings.
+# More robust than single_speaker.yaml (fewer skipped / repeated words),
+# because text-to-speech alignment was already learned from thousands of hours.
+run_dir: runs/finetune_my_voice
+data:
+  - data/shards/my_voice
+init_checkpoint: runs/pretrain_s/checkpoints/step-XXXXXXX   # <- set to your pretrained checkpoint
+codec: kyutai/mimi
+num_codebooks: 8
+
+lr: 5.0e-5
+min_lr_ratio: 0.1
+warmup_steps: 100
+max_steps: 2000
+weight_decay: 0.1
+grad_clip: 1.0
+max_tokens_per_batch: 16384
+grad_accum: 4
+precision: bf16
+gradient_checkpointing: true
+
+ref_prob: 0.0
+val_fraction: 0.02
+max_val_utterances: 300
+num_workers: 4
+
+log_every: 10
+eval_every: 200
+save_every: 200
+keep_checkpoints: 5
+num_eval_samples: 4
+eval_max_frames: 500
+device: cuda

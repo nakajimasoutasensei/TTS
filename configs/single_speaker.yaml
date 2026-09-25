@@ -1,0 +1,37 @@
+# One speaker, ~40 h of your own recordings, trained directly from Qwen3.
+# ~1.9M frames: one epoch is ~35 optimizer steps at the batch size below, so
+# max_steps 4000 is ~110 epochs. Watch val loss and the eval samples: stop
+# (or pick an earlier checkpoint) once val loss stops improving.
+#
+# Cost: roughly 5 min per epoch on an RTX 4090, ~2 min on an A100.
+run_dir: runs/single_speaker
+data:
+  - data/shards/my_voice
+base: Qwen/Qwen3-0.6B
+codec: kyutai/mimi
+num_codebooks: 8
+
+lr: 1.0e-4
+min_lr_ratio: 0.1
+warmup_steps: 200
+max_steps: 4000
+weight_decay: 0.1
+grad_clip: 1.0
+max_tokens_per_batch: 16384
+grad_accum: 4
+precision: bf16
+gradient_checkpointing: true
+
+# Single speaker: no voice references; the model learns this one voice.
+ref_prob: 0.0
+val_fraction: 0.02
+max_val_utterances: 300
+num_workers: 4
+
+log_every: 10
+eval_every: 250
+save_every: 250
+keep_checkpoints: 5
+num_eval_samples: 4
+eval_max_frames: 500
+device: cuda

@@ -78,10 +78,18 @@ class Trainer:
             self.model = DualAR.from_pretrained(resume)
             self.tok = TTSTokenizer.from_pretrained(resume, self.model.config.codebook_size)
         else:
-            self.tok = TTSTokenizer.from_pretrained(cfg.base, cfg.codebook_size)
-            self.model = DualAR.from_qwen3(
-                cfg.base, self.tok, num_codebooks=cfg.num_codebooks, fast=FastARConfig(**cfg.fast)
-            )
+            if cfg.init_checkpoint:
+                # Fine-tuning: start from trained Dual-AR weights, fresh optimizer.
+                print(f"initializing from {cfg.init_checkpoint}")
+                self.model = DualAR.from_pretrained(cfg.init_checkpoint)
+                self.tok = TTSTokenizer.from_pretrained(cfg.init_checkpoint, self.model.config.codebook_size)
+                if self.model.config.num_codebooks != cfg.num_codebooks:
+                    raise ValueError("num_codebooks differs from the init checkpoint")
+            else:
+                self.tok = TTSTokenizer.from_pretrained(cfg.base, cfg.codebook_size)
+                self.model = DualAR.from_qwen3(
+                    cfg.base, self.tok, num_codebooks=cfg.num_codebooks, fast=FastARConfig(**cfg.fast)
+                )
             config_path = self.run_dir / "config.yaml"
             if not config_path.exists():
                 config_path.write_text(yaml.safe_dump(cfg.to_dict(), sort_keys=False))

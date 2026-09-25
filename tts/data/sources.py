@@ -45,6 +45,45 @@ def local_source(root: str | Path, sample_rate: int, source_name: str = "local")
         )
 
 
+def metadata_source(
+    metadata: str | Path,
+    sample_rate: int,
+    source_name: str = "metadata",
+    speaker: str = "speaker0",
+    audio_dir: str | Path | None = None,
+) -> Iterator[Item]:
+    """LJSpeech-style metadata: one ``file|transcript`` line per clip.
+
+    ``file`` is relative to ``audio_dir`` (default: ``<metadata dir>/wavs``);
+    a missing extension means ``.wav``. Extra ``|`` columns (e.g. LJSpeech's
+    normalized text) are allowed: the last column is used as the transcript.
+    All clips get the same speaker.
+    """
+    metadata = Path(metadata)
+    root = Path(audio_dir) if audio_dir else metadata.parent / "wavs"
+    for line_no, line in enumerate(metadata.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        parts = line.split("|")
+        if len(parts) < 2:
+            raise ValueError(f"{metadata}:{line_no}: expected 'file|transcript'")
+        name, text = parts[0].strip(), parts[-1].strip()
+        path = root / name
+        if not path.suffix:
+            path = path.with_suffix(".wav")
+        wav = load_audio(path, sample_rate)[0]
+        yield (
+            Utterance(
+                id=f"{source_name}/{Path(name).with_suffix('').as_posix()}",
+                text=text,
+                speaker=f"{source_name}/{speaker}",
+                source=source_name,
+                duration=wav.shape[-1] / sample_rate,
+            ),
+            wav,
+        )
+
+
 def _get(row: dict, key: str) -> Any:
     """Nested lookup: "json.text" -> row["json"]["text"]."""
     value: Any = row

@@ -5,6 +5,9 @@ Examples:
     # local folder: speaker_dir/clip.wav + speaker_dir/clip.txt
     python scripts/tokenize_dataset.py local data/raw/mydata --out data/shards/mydata
 
+    # LJSpeech-style: metadata.csv with "file|transcript" lines, audio in wavs/
+    python scripts/tokenize_dataset.py metadata data/raw/my_voice/metadata.csv --out data/shards/my_voice
+
     # Hugging Face preset (see tts/data/sources.py PRESETS); try --limit first
     python scripts/tokenize_dataset.py preset mls_en --out data/shards/mls_en --limit 20
 
@@ -23,12 +26,16 @@ import torch
 
 from tts.codec import MimiCodec
 from tts.data import FilterConfig, ShardWriter, check_utterance, normalize_text
-from tts.data.sources import PRESETS, Item, hf_source, local_source
+from tts.data.sources import PRESETS, Item, hf_source, local_source, metadata_source
 
 
 def make_source(args: argparse.Namespace, sample_rate: int) -> Iterator[Item]:
     if args.kind == "local":
         return local_source(args.input, sample_rate, source_name=args.name or Path(args.input).name)
+    if args.kind == "metadata":
+        return metadata_source(
+            args.input, sample_rate, source_name=args.name or Path(args.input).parent.name, audio_dir=args.audio_dir
+        )
     import datasets
 
     preset = dict(PRESETS[args.input])
@@ -39,8 +46,9 @@ def make_source(args: argparse.Namespace, sample_rate: int) -> Iterator[Item]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("kind", choices=["local", "preset"])
-    parser.add_argument("input", help="directory (local) or preset name (preset)")
+    parser.add_argument("kind", choices=["local", "metadata", "preset"])
+    parser.add_argument("input", help="directory (local), metadata file (metadata), or preset name (preset)")
+    parser.add_argument("--audio-dir", help="metadata: audio folder (default: <metadata dir>/wavs)")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--name", help="source name used as id prefix (default: input name)")
     parser.add_argument("--codec", default="kyutai/mimi")

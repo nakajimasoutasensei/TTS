@@ -88,3 +88,25 @@ def test_training_reduces_loss(tmp_path, shards, tiny_base, codec_dir):
     trainer.train()
     losses = [json.loads(l)["loss"] for l in (tmp_path / "run" / "metrics.jsonl").read_text().splitlines() if '"loss"' in l]
     assert losses[-1] < losses[0] * 0.8, (losses[0], losses[-1])
+
+
+def test_finetune_from_checkpoint(tmp_path, shards, tiny_base, codec_dir):
+    Trainer(_cfg(tmp_path / "pre", shards, tiny_base, codec_dir, max_steps=2, save_every=2)).train()
+    ckpt = latest_checkpoint(tmp_path / "pre")
+
+    ft = Trainer(_cfg(tmp_path / "ft", shards, "/nonexistent/base", codec_dir, init_checkpoint=str(ckpt)))
+    assert ft.step == 0  # fresh schedule, not a resume
+    from tts.model import DualAR
+
+    pre = DualAR.from_pretrained(ckpt)
+    for (name, a), (_, b) in zip(pre.named_parameters(), ft.model.named_parameters()):
+        assert torch.equal(a, b), name
+    ft.train()
+    assert latest_checkpoint(tmp_path / "ft").name == "step-0000006"
+
+
+def test_shipped_configs_load():
+    from pathlib import Path
+
+    for path in Path("configs").glob("*.yaml"):
+        load_config(path)

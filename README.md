@@ -69,6 +69,20 @@ validation loss and writes generated samples to `runs/<name>/samples/`, next to
 the ground truth in `samples/reference/`. Re-running the same command resumes
 from the latest checkpoint.
 
+## Single-speaker recipe (your own recordings)
+
+1. **Prepare the data.** Either `speaker/clip.wav` + `speaker/clip.txt` pairs,
+   or LJSpeech style: `wavs/*.wav` plus `metadata.csv` with `file|transcript`
+   lines. Clips must be 1–30 s long; longer ones are dropped (see `stats.json`).
+2. **Tokenize:**
+   `python scripts/tokenize_dataset.py metadata data/raw/my_voice/metadata.csv --out data/shards/my_voice`
+3. **Train directly** (cheap: ~5 min per epoch on an RTX 4090):
+   `python scripts/train.py configs/single_speaker.yaml`
+   Stop when the validation loss stops improving, and listen to the eval samples.
+4. **If it skips or repeats words:** pretrain on public data first
+   (`configs/pretrain_s.yaml`), then fine-tune on your voice with
+   `configs/finetune_single_speaker.yaml` (set `init_checkpoint`).
+
 ## Web UI
 
 ```bash

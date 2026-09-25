@@ -15,7 +15,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+ui = ["gradio>=6", "pandas"]
+dev = ["pytest", "tts[ui]"]
 
 [build-system]
 requires = ["setuptools>=64"]

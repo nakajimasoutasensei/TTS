@@ -18,6 +18,8 @@ import math
 from pathlib import Path
 import random
 import shutil
+import signal
+import threading
 import time
 from typing import Iterator
 import zlib
@@ -149,8 +151,16 @@ class Trainer:
 
     # ---- loop -------------------------------------------------------------
 
+    def request_stop(self, *_) -> None:
+        """Finish the current step, save a checkpoint, and return from train()."""
+        self._stop_requested = True
+
     def train(self) -> None:
         cfg = self.cfg
+        self._stop_requested = False
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, self.request_stop)
+            signal.signal(signal.SIGINT, self.request_stop)
         batches = self._batches()
         self.model.train()
         t0 = time.perf_counter()
@@ -191,6 +201,12 @@ class Trainer:
                 self.model.train()
             if self.step % cfg.save_every == 0 or self.step == cfg.max_steps:
                 self.save()
+            elif self._stop_requested:
+                self.save()
+            if self._stop_requested:
+                self._log({"step": self.step, "event": "stopped"})
+                return
+        self._log({"step": self.step, "event": "finished"})
 
     # ---- evaluation -------------------------------------------------------
 

@@ -69,6 +69,27 @@ validation loss and writes generated samples to `runs/<name>/samples/`, next to
 the ground truth in `samples/reference/`. Re-running the same command resumes
 from the latest checkpoint.
 
+## Web UI
+
+```bash
+pip install -e ".[ui]"
+python scripts/webui.py        # then open http://127.0.0.1:7860
+```
+
+- **Speak:** pick a checkpoint, load it, type text, optionally add a 5–20 s
+  reference clip plus its transcript to clone a voice, and generate. Sampling
+  settings and a seed are under "Sampling".
+- **Train:** pick a base config, optionally change run directory, data, steps,
+  learning rate, batch size, and more, then **Start / resume**. Training runs
+  in the background (it keeps going if the page is closed). The monitor shows
+  step, losses, learning rate, and speed, live loss charts, the log, and eval
+  samples next to the ground truth. **Stop & save** finishes the current step
+  and writes a checkpoint.
+
+On the rented GB10, keep the default `127.0.0.1` and reach it through an SSH
+tunnel (`ssh -L 7860:127.0.0.1:7860 user@host`). If you must listen on a
+public address, add `--auth user:password`.
+
 ## Code layout
 
 | Path | Contents |
@@ -79,5 +100,6 @@ from the latest checkpoint.
 | `tts/inference/` | sampling and autoregressive generation |
 | `tts/data/` | transcript normalization, filters, sources, shards, training dataset + batching |
 | `tts/train/` | training config and loop (checkpoints, resume, eval samples) |
+| `tts/ui/` | web UI (Gradio) and its backend: model sessions, training process control |
 | `tts/eval/` | reconstruction metrics |
 | `scripts/` | codec round-trip, overfit, tokenization, and training runners |

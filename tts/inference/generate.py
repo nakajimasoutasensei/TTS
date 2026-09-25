@@ -72,12 +72,6 @@ def generate(
     codes = prompt.codes.unsqueeze(0).to(device)
     audio_mask = prompt.audio_mask.unsqueeze(0).to(device)
 
-    # Constrained decoding: codebook 0 may only emit semantic tokens or <|im_end|>.
-    vocab = model.slow.config.vocab_size
-    bias = torch.full((vocab,), float("-inf"), device=device)
-    bias[cfg.semantic_begin_id : cfg.semantic_begin_id + cfg.codebook_size] = 0
-    bias[cfg.im_end_id] = 0
-
     def fast_sample(logits: torch.Tensor) -> torch.Tensor:
         return sample_logits(logits, s.fast_temperature, s.fast_top_p, s.fast_top_k, generator)
 
@@ -90,18 +84,20 @@ def generate(
     recent: list[int] = []
 
     for _ in range(max_frames):
-        logits = model.slow.lm_head(hidden).float() + bias
-        token = sample_logits(logits, s.temperature, s.top_p, s.top_k, generator)
-        if s.ras_window > 0 and token.item() != cfg.im_end_id and token.item() in recent:
-            token = sample_logits(logits, s.ras_temperature, s.ras_top_p, s.top_k, generator)
-        if token.item() == cfg.im_end_id:
+        # Constrained decoding: only semantic tokens or <|im_end|> (index 0).
+        logits = model.audio_logits(hidden).float()
+        index = sample_logits(logits, s.temperature, s.top_p, s.top_k, generator)
+        if s.ras_window > 0 and index.item() != 0 and index.item() in recent:
+            index = sample_logits(logits, s.ras_temperature, s.ras_top_p, s.top_k, generator)
+        if index.item() == 0:
             break
+        token = model.audio_index_to_token(index)
 
         code0 = token - cfg.semantic_begin_id
         frame = model.fast.generate(hidden, code0, fast_sample)  # [1, N]
         frames.append(frame[0])
         if s.ras_window > 0:
-            recent = (recent + [token.item()])[-s.ras_window :]
+            recent = (recent + [index.item()])[-s.ras_window :]
 
         out = model.slow.model(
             inputs_embeds=model.embed(

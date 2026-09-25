@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from tests.conftest import CODEBOOK_SIZE, NUM_CODEBOOKS, make_model
@@ -97,3 +98,14 @@ def test_overfit_and_reproduce(tok):
         prompt = build_prompt(tok, NUM_CODEBOOKS, text)
         codes = generate(model, prompt, max_frames=50, sampling=GREEDY)
         assert torch.equal(codes, target), text
+
+
+def test_audio_class_mapping(tok):
+    model = make_model(tok)
+    tokens = torch.tensor([tok.im_end_id, tok.semantic_begin_id, tok.semantic_end_id])
+    index = model.token_to_audio_index(tokens)
+    assert index.tolist() == [0, 1, CODEBOOK_SIZE]
+    assert torch.equal(model.audio_index_to_token(index), tokens)
+    assert model.audio_logits(torch.zeros(2, 64)).shape == (2, CODEBOOK_SIZE + 1)
+    with pytest.raises(ValueError):
+        model.token_to_audio_index(torch.tensor([tok.im_start_id]))

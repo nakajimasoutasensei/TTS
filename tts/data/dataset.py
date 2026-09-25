@@ -103,9 +103,13 @@ class TokenBudgetBatchSampler(Sampler[list[int]]):
         self.pool_size = pool_size
         self.seed = seed
         self.epoch = 0
+        self.start_batch = 0
 
-    def set_epoch(self, epoch: int) -> None:
+    def set_epoch(self, epoch: int, start_batch: int = 0) -> None:
+        """Select the epoch's shuffle; ``start_batch`` skips batches already
+        consumed (used when resuming mid-epoch)."""
         self.epoch = epoch
+        self.start_batch = start_batch
 
     def _batches(self) -> list[list[int]]:
         rng = random.Random(hash((self.seed, self.epoch)))
@@ -131,7 +135,7 @@ class TokenBudgetBatchSampler(Sampler[list[int]]):
         return batches
 
     def __iter__(self) -> Iterator[list[int]]:
-        return iter(self._batches())
+        return iter(self._batches()[self.start_batch :])
 
     def __len__(self) -> int:
-        return len(self._batches())
+        return max(0, len(self._batches()) - self.start_batch)

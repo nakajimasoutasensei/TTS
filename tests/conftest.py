@@ -57,3 +57,23 @@ def codec_dir(tmp_path_factory):
     torch.manual_seed(0)
     MimiModel(MimiConfig()).save_pretrained(path)
     return path
+
+
+@pytest.fixture(scope="session")
+def tiny_base(tmp_path_factory):
+    """A tiny local "Qwen3" checkpoint + word-level tokenizer, standing in for
+    Qwen/Qwen3-0.6B in trainer tests."""
+    from transformers import Qwen3ForCausalLM
+
+    path = tmp_path_factory.mktemp("tiny_qwen")
+    vocab = {w: i for i, w in enumerate(["[UNK]"] + WORDS)}
+    t = Tokenizer(models.WordLevel(vocab, unk_token="[UNK]"))
+    t.pre_tokenizer = pre_tokenizers.Whitespace()
+    hf = PreTrainedTokenizerFast(tokenizer_object=t, unk_token="[UNK]")
+    hf.save_pretrained(path)
+    config = Qwen3Config(
+        vocab_size=len(hf), hidden_size=64, intermediate_size=128, num_hidden_layers=2,
+        num_attention_heads=4, num_key_value_heads=2, head_dim=16, tie_word_embeddings=True,
+    )
+    Qwen3ForCausalLM(config).save_pretrained(path)
+    return path

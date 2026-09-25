@@ -57,6 +57,18 @@ Re-running the same command resumes where it stopped. See `stats.json` for
 kept/dropped counts. Check each dataset's license in `docs/LICENSES.md`
 before tokenizing it.
 
+## Training (milestone M4)
+
+```bash
+python scripts/train.py configs/pretrain_s.yaml
+python scripts/train.py configs/pretrain_s.yaml max_steps=1000 lr=1e-4   # overrides
+```
+
+Logs go to `runs/<name>/metrics.jsonl`. Every `eval_every` steps it records the
+validation loss and writes generated samples to `runs/<name>/samples/`, next to
+the ground truth in `samples/reference/`. Re-running the same command resumes
+from the latest checkpoint.
+
 ## Code layout
 
 | Path | Contents |
@@ -66,5 +78,6 @@ before tokenizing it.
 | `tts/model/` | Dual-AR model: Qwen3 slow AR + fast AR |
 | `tts/inference/` | sampling and autoregressive generation |
 | `tts/data/` | transcript normalization, filters, sources, shards, training dataset + batching |
+| `tts/train/` | training config and loop (checkpoints, resume, eval samples) |
 | `tts/eval/` | reconstruction metrics |
-| `scripts/` | codec round-trip, overfit, and tokenization runners |
+| `scripts/` | codec round-trip, overfit, tokenization, and training runners |

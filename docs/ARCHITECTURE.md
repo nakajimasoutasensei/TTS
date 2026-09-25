@@ -90,8 +90,9 @@ roughly a 30 s reference + text + ~3 min of generated speech.
 - Input embedding per audio frame = text/semantic embedding + sum of the
   embeddings of all N codebooks of that frame (scaled by `1/sqrt(N+1)`), so the
   model sees full acoustic context of previous frames.
-- Output: next token logits; during audio generation logits are masked to
-  semantic tokens + `<|im_end|>` (constrained decoding).
+- Output: logits over **only** `<|im_end|>` + the K semantic tokens (a slice
+  of the tied LM head). Training and generation use the same K+1-way softmax,
+  so they match exactly, and the loss avoids a ~154k-way softmax per frame.
 
 | Size | Layers | Hidden | Heads (Q/KV) | head_dim | Params |
 |---|---|---|---|---|---|
@@ -306,7 +307,7 @@ TTS/
 | M1 | Codec wrapper + round-trip test | encode→decode on test set, measured quality — *code done (`tts/codec`, `scripts/codec_roundtrip.py`); real-weight run pending on GB10* |
 | M2 | Dual-AR model code + tiny overfit run | overfits 10 utterances, generates intelligible audio — *code done (`tts/model`, `tts/text`, `tts/inference`, `scripts/overfit.py`); tiny-model overfit test reproduces codes exactly; real run pending on GB10* |
 | M3 | Data pipeline + first tokenized shards | ≥1k hours tokenized, filters validated — *code done (`tts/data`, `scripts/tokenize_dataset.py`); dataset presets and license checks pending on GB10* |
-| M4 | P1 pretraining (S size first) | WER / SIM on eval set tracked, beats baseline |
+| M4 | P1 pretraining (S size first) | WER / SIM on eval set tracked, beats baseline — *training code done (`tts/train`, `scripts/train.py`, `configs/pretrain_s.yaml`); WER/SIM eval and the real run pending* |
 | M5 | Inference: quantization, streaming, VRAM benchmark | runs in ≤6 GB (S/int8 M) and ≤8 GB (M) |
 | M6 | P2 SFT (tags, multi-speaker, cloning) | tag adherence + SIM targets |
 | M7 | P3 alignment (DPO → GRPO) | WER/SIM/UTMOS improve without regressions |

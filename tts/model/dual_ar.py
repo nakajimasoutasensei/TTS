@@ -91,6 +91,35 @@ class DualAR(nn.Module):
     def semantic_end_id(self) -> int:
         return self.config.semantic_begin_id + self.config.codebook_size - 1
 
+    def audio_logits(self, hidden: torch.Tensor) -> torch.Tensor:
+        """Slow-AR logits restricted to what may follow in an audio segment:
+        index 0 = <|im_end|>, index 1 + c = semantic token for code c.
+
+        Training and generation both use this (a softmax over K + 1 classes
+        instead of the full ~154k vocabulary), so they match exactly, and the
+        training loss needs far less memory.
+        """
+        weight = self.slow.lm_head.weight
+        rows = torch.cat(
+            [
+                weight[self.config.im_end_id : self.config.im_end_id + 1],
+                weight[self.config.semantic_begin_id : self.semantic_end_id + 1],
+            ]
+        )
+        return hidden @ rows.T.to(hidden.dtype)
+
+    def audio_index_to_token(self, index: torch.Tensor) -> torch.Tensor:
+        """Inverse of the ``audio_logits`` class layout."""
+        semantic = index - 1 + self.config.semantic_begin_id
+        return torch.where(index == 0, torch.full_like(index, self.config.im_end_id), semantic)
+
+    def token_to_audio_index(self, token: torch.Tensor) -> torch.Tensor:
+        is_end = token == self.config.im_end_id
+        is_semantic = (token >= self.config.semantic_begin_id) & (token <= self.semantic_end_id)
+        if not bool((is_end | is_semantic).all()):
+            raise ValueError("trained labels must be semantic tokens or <|im_end|>")
+        return torch.where(is_end, torch.zeros_like(token), token - self.config.semantic_begin_id + 1)
+
     def embed(self, tokens: torch.Tensor, codes: torch.Tensor, audio_mask: torch.Tensor) -> torch.Tensor:
         """tokens [B, L], codes [B, N, L], audio_mask [B, L] -> [B, L, D]."""
         x = self.slow.get_input_embeddings()(tokens)
@@ -108,12 +137,12 @@ class DualAR(nn.Module):
         """Training loss for a right-padded batch (see ``tts.text.collate``)."""
         hidden = self.slow.model(inputs_embeds=self.embed(tokens, codes, audio_mask)).last_hidden_state
 
-        # Slow AR: next-token loss, logits only where a label exists.
+        # Slow AR: next-token loss over the audio classes, where a label exists.
         h_prev = hidden[:, :-1]
         target = labels[:, 1:]
         trained = target != IGNORE_INDEX
-        logits = self.slow.lm_head(h_prev[trained])
-        slow_loss = F.cross_entropy(logits.float(), target[trained])
+        logits = self.audio_logits(h_prev[trained])
+        slow_loss = F.cross_entropy(logits.float(), self.token_to_audio_index(target[trained]))
 
         # Fast AR: for each trained frame, the state that predicted its
         # semantic token plus the frame's codes.

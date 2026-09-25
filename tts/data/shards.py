@@ -78,21 +78,29 @@ class ShardWriter:
 
 
 class ShardedCorpus:
-    """Random access to a tokenized corpus written by ``ShardWriter``."""
+    """Random access to one or more tokenized corpora written by ``ShardWriter``.
 
-    def __init__(self, root: str | Path):
-        self.root = Path(root)
+    Ids and speakers are prefixed with the source name at tokenization time,
+    so corpora can be mixed without collisions.
+    """
+
+    def __init__(self, roots: str | Path | list[str | Path]):
+        self.roots = [Path(r) for r in (roots if isinstance(roots, list) else [roots])]
         self.entries: list[dict] = []
         self._shard_of: list[int] = []
         self._npy: list[Path] = []
-        for i, p in enumerate(_shard_paths(self.root)):
-            self._npy.append(p.with_suffix(".npy"))
-            with p.open() as f:
-                for line in f:
-                    self.entries.append(json.loads(line))
-                    self._shard_of.append(i)
+        for root in self.roots:
+            for p in _shard_paths(root):
+                self._npy.append(p.with_suffix(".npy"))
+                with p.open() as f:
+                    for line in f:
+                        self.entries.append(json.loads(line))
+                        self._shard_of.append(len(self._npy) - 1)
         if not self.entries:
-            raise ValueError(f"no shards found in {self.root}")
+            raise ValueError(f"no shards found in {[str(r) for r in self.roots]}")
+        ids = [e["id"] for e in self.entries]
+        if len(set(ids)) != len(ids):
+            raise ValueError("duplicate utterance ids across corpora")
         self._arrays: dict[int, np.ndarray] = {}
         self.by_speaker: dict[str, list[int]] = {}
         for i, e in enumerate(self.entries):

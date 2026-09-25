@@ -4,6 +4,9 @@ Weights: ``kyutai/mimi`` on Hugging Face, CC-BY 4.0 (see docs/LICENSES.md).
 Mimi runs at 24 kHz / 12.5 Hz with up to 32 RVQ codebooks of size 2048;
 codebook 0 is distilled from WavLM and carries semantic content. We use the
 first 8 codebooks (ARCHITECTURE.md §4.1).
+
+Mimi's encoder is causal, so the base class's padded ``encode_batch`` is
+exact (checked in tests/test_codec.py).
 """
 
 import torch

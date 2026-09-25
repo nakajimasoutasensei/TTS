@@ -5,7 +5,9 @@ description = "Low-requirement expressive English TTS (Dual-AR + Mimi codec)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "datasets",
     "numpy",
+    "safetensors",
     "soundfile",
     "torch>=2.4",
     "torchaudio>=2.4",

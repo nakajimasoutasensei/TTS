@@ -162,10 +162,34 @@ Numbers must be re-measured with `torch.cuda.max_memory_allocated` in M5.
 
 ### 6.1 Data
 
-Pipeline: collect → VAD segmentation (5–30 s) → ASR transcription → filtering
-(DNSMOS/UTMOS, SNR, CER between two ASR passes) → speaker clustering → tag
-annotation (emotion/events via audio-LLM or classifier) → codec tokenization →
-sharded storage.
+Full pipeline: collect → VAD segmentation (5–30 s) → ASR transcription →
+filtering (DNSMOS/UTMOS, SNR, CER between two ASR passes) → speaker clustering →
+tag annotation (emotion/events via audio-LLM or classifier) → codec tokenization
+→ sharded storage.
+
+**v1 (implemented, `tts/data`, `scripts/tokenize_dataset.py`):** the candidate
+corpora are already segmented and transcribed, so v1 starts at filtering:
+
+1. Stream rows from a local folder or a Hugging Face dataset (no raw audio is
+   stored locally; audio is decoded with soundfile and resampled to 24 kHz).
+2. Normalize transcripts lightly (quotes, dashes, spacing; casing and
+   punctuation kept because they carry prosody).
+3. Filter: English charset, 1–30 s, 4–30 characters/second (catches
+   misaligned transcripts).
+4. Tokenize with Mimi in length-sorted, zero-padded batches (exact, because
+   Mimi's encoder is causal; verified in tests).
+5. Write int16 shards (`.npy` codes + `.jsonl` metadata); resumable.
+
+Storage: 50k hours ≈ 2.25B frames × 8 codebooks × 2 bytes ≈ **36 GB**.
+
+Training samples (`TTSDataset`): with probability 0.5, another clip of the same
+speaker (≤20 s, never cut) is prepended as the voice reference, which trains
+zero-shot cloning; batches are packed by a token budget
+(`TokenBudgetBatchSampler`).
+
+Deferred to later milestones: ASR-consistency filter (Whisper CER), MOS-based
+quality filter, speaker clustering for corpora without speaker ids, and tag
+annotation (needed for P2).
 
 English only (D1). Because D2 keeps commercial use possible, **only datasets
 whose license allows commercial use are allowed** (no NC / research-only terms).
@@ -281,7 +305,7 @@ TTS/
 | M0 | Decisions D1–D4, `LICENSES.md` | decisions done; licenses verified for backbone, codec, first datasets — *backbone + codec verified; datasets pending* |
 | M1 | Codec wrapper + round-trip test | encode→decode on test set, measured quality — *code done (`tts/codec`, `scripts/codec_roundtrip.py`); real-weight run pending on GB10* |
 | M2 | Dual-AR model code + tiny overfit run | overfits 10 utterances, generates intelligible audio — *code done (`tts/model`, `tts/text`, `tts/inference`, `scripts/overfit.py`); tiny-model overfit test reproduces codes exactly; real run pending on GB10* |
-| M3 | Data pipeline + first tokenized shards | ≥1k hours tokenized, filters validated |
+| M3 | Data pipeline + first tokenized shards | ≥1k hours tokenized, filters validated — *code done (`tts/data`, `scripts/tokenize_dataset.py`); dataset presets and license checks pending on GB10* |
 | M4 | P1 pretraining (S size first) | WER / SIM on eval set tracked, beats baseline |
 | M5 | Inference: quantization, streaming, VRAM benchmark | runs in ≤6 GB (S/int8 M) and ≤8 GB (M) |
 | M6 | P2 SFT (tags, multi-speaker, cloning) | tag adherence + SIM targets |

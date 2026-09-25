@@ -42,6 +42,21 @@ it memorizes the clips, then generates each transcript back. Compare
 `*.gen.wav` (model) with `*.codec.wav` (codec round trip): they should sound
 the same.
 
+## Tokenizing data (milestone M3)
+
+```bash
+# Local folder: <speaker>/<clip>.wav + <speaker>/<clip>.txt
+python scripts/tokenize_dataset.py local data/raw/mydata --out data/shards/mydata
+
+# Hugging Face preset (tts/data/sources.py); check column names with a small run first
+python scripts/tokenize_dataset.py preset mls_en --out data/shards/mls_en --limit 20
+```
+
+Clips are normalized, filtered, encoded with Mimi, and written as shards.
+Re-running the same command resumes where it stopped. See `stats.json` for
+kept/dropped counts. Check each dataset's license in `docs/LICENSES.md`
+before tokenizing it.
+
 ## Code layout
 
 | Path | Contents |
@@ -50,5 +65,6 @@ the same.
 | `tts/text/` | tokenizer with control/semantic tokens, prompt layout, batching |
 | `tts/model/` | Dual-AR model: Qwen3 slow AR + fast AR |
 | `tts/inference/` | sampling and autoregressive generation |
+| `tts/data/` | transcript normalization, filters, sources, shards, training dataset + batching |
 | `tts/eval/` | reconstruction metrics |
-| `scripts/` | round-trip and overfit runners |
+| `scripts/` | codec round-trip, overfit, and tokenization runners |

@@ -75,3 +75,11 @@ def test_metrics():
     mel = LogMelDistance(24000)
     assert torch.allclose(mel(ref, ref), torch.zeros(2))
     assert (mel(ref, noisy) > 0).all()
+
+
+def test_encode_batch_matches_single(codec):
+    torch.manual_seed(1)
+    wavs = [torch.randn(n) * 0.1 for n in (24000 + 500, 30000, 1920 * 7)]
+    batched = codec.encode_batch(wavs)
+    for w, c in zip(wavs, batched):
+        assert torch.equal(c, codec.encode(w.view(1, 1, -1))[0])

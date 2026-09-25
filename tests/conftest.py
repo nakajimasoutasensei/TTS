@@ -45,3 +45,15 @@ def make_model(tok: TTSTokenizer, dim: int = 64) -> DualAR:
 @pytest.fixture
 def tok() -> TTSTokenizer:
     return make_tokenizer()
+
+
+@pytest.fixture(scope="session")
+def codec_dir(tmp_path_factory):
+    """Randomly initialized Mimi saved locally, for scripts that load by path."""
+    import torch
+    from transformers import MimiConfig, MimiModel
+
+    path = tmp_path_factory.mktemp("mimi")
+    torch.manual_seed(0)
+    MimiModel(MimiConfig()).save_pretrained(path)
+    return path

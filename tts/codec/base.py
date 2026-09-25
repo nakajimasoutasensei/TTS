@@ -38,6 +38,22 @@ class AudioCodec(ABC):
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """[B, N, T] codes -> [B, 1, T * hop_length] waveform."""
 
+    def encode_batch(self, waveforms: list[torch.Tensor]) -> list[torch.Tensor]:
+        """Encode variable-length mono waveforms ([S] each) in one call.
+
+        Zero-pads on the right and cuts each result to ``num_frames(S)``.
+        This is exact only for causal codecs, where padding after a clip
+        cannot change its codes; non-causal codecs must override this.
+        """
+        if not waveforms:
+            return []
+        length = max(w.shape[-1] for w in waveforms)
+        batch = torch.zeros(len(waveforms), 1, length, dtype=waveforms[0].dtype)
+        for i, w in enumerate(waveforms):
+            batch[i, 0, : w.shape[-1]] = w
+        codes = self.encode(batch)
+        return [codes[i, :, : self.num_frames(w.shape[-1])] for i, w in enumerate(waveforms)]
+
     def check_codes(self, codes: torch.Tensor) -> None:
         if codes.dim() != 3 or codes.shape[1] != self.num_codebooks:
             raise ValueError(
